@@ -8,6 +8,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.metrics import precision_score, recall_score
+from mlflow.models.signature import ModelSignature
+from mlflow.types.schema import Schema, ColSpec
 
 
 def get_metrics(y_true, y_pred):
@@ -20,7 +22,7 @@ def get_metrics(y_true, y_pred):
 
 
 def main():
-    # Set and parse arguments
+    # Set arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--penalty', type=str, required=False, default='l2')
     parser.add_argument('--dual', type=bool, required=False, default=False)
@@ -32,14 +34,21 @@ def main():
     parser.add_argument('--max-iter', type=int, required=False, default=100)
     parser.add_argument('--l1-ratio', type=float, required=False,
         default=None)
+    parser.add_argument('--save-model', type=bool, required=False,
+        default=False)
+    parser.add_argument('--max-input-examples', type=int, required=False,
+        default=3)
+
+    # Parse arguments
     args = parser.parse_args()
-    args = {k: v for k, v in vars(args).items() if k != 'args'}
-    if args['penalty'] != 'l1':
-        del args['l1_ratio']
+    params = {k: v for k, v in vars(args).items() \
+              if k not in ('args', 'save_model', 'max_input_examples')}
+    if params['penalty'] != 'l1':
+        del params['l1_ratio']
 
     # Load data
-    dirname = os.path.dirname(os.path.abspath(__file__))
-    filepath = os.path.join(dirname, 'data', 'iris.csv')
+    dirpath = os.path.dirname(os.path.abspath(__file__))
+    filepath = os.path.join(dirpath, 'data', 'iris.csv')
     df = pd.read_csv(filepath)
 
     # Split data to x/y and train/test
@@ -47,9 +56,11 @@ def main():
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25,
         random_state=42)
     
-    tracking_uri = pathlib.Path(os.path.join(dirname, 'mlruns')).as_uri()
+    # Start MLflow experiment
+    tracking_uri = pathlib.Path(os.path.join(dirpath, 'mlruns')).as_uri()
     mlflow.set_tracking_uri(tracking_uri)
     exp = mlflow.set_experiment('iris_classification')
+
     with mlflow.start_run(experiment_id=exp.experiment_id):
         # Preprocess data
         scaler = StandardScaler()
@@ -57,7 +68,7 @@ def main():
         x_test = scaler.transform(x_test)
 
         # Train model
-        model = LogisticRegression(**args, random_state=42)
+        model = LogisticRegression(**params, random_state=42)
         model.fit(x_train, y_train)
 
         # Get predictions and evaluate
@@ -66,11 +77,29 @@ def main():
         for metric in metrics:
             print(f'{metric}: {metrics[metric]}')
 
+        # Define model signatures and input examples
+        input_schema = Schema([
+            ColSpec('double', 'sepal_length'),
+            ColSpec('double', 'sepal_width'),
+            ColSpec('double', 'petal_length'),
+            ColSpec('double', 'petal_width')
+        ])
+        output_schema = Schema([ColSpec('string')])
+        signature = ModelSignature(inputs=input_schema, outputs=output_schema)
+        input_examples = x.iloc[:args.max_input_examples, :]
+
         # Log with MLflow
-        mlflow.log_params(args)
+        model_name = 'logistic_regression_model'
+        mlflow.log_params(params)
         mlflow.log_metrics(metrics)
         mlflow.log_artifact(filepath)
-        mlflow.sklearn.log_model(model, 'logistic_regression_model')
+        mlflow.sklearn.log_model(model, model_name, signature=signature,
+                                 input_example=input_examples)
+        if args.save_model:
+            model_dirpath = os.path.join(dirpath, 'mlmodels', model_name)
+            mlflow.sklearn.save_model(model, model_dirpath,
+                                      signature=signature,
+                                      input_example=input_examples)
 
     return 0
 
