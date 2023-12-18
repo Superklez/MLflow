@@ -34,11 +34,11 @@ def main():
     parser.add_argument('--solver', type=str, required=False, default='lbfgs')
     parser.add_argument('--max-iter', type=int, required=False, default=100)
     parser.add_argument('--l1-ratio', type=float, required=False,
-        default=None)
+                        default=None)
     parser.add_argument('--save-model', type=bool, required=False,
-        default=False)
+                        default=False)
     parser.add_argument('--max-input-examples', type=int, required=False,
-        default=3)
+                        default=3)
 
     # Parse arguments
     args = parser.parse_args()
@@ -55,7 +55,7 @@ def main():
     # Split data to x/y and train/test
     x, y = df.iloc[:, :-1], df.iloc[:, -1]
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25,
-        random_state=42)
+                                                        random_state=42)
     
     # Start MLflow experiment
     tracking_uri = pathlib.Path(os.path.join(dirpath, 'mlruns')).as_uri()
