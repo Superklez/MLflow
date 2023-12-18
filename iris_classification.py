@@ -3,6 +3,7 @@ import mlflow
 import pathlib
 import argparse
 import pandas as pd
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
@@ -62,17 +63,15 @@ def main():
     exp = mlflow.set_experiment('iris_classification')
 
     with mlflow.start_run(experiment_id=exp.experiment_id):
-        # Preprocess data
-        scaler = StandardScaler()
-        x_train = scaler.fit_transform(x_train)
-        x_test = scaler.transform(x_test)
-
-        # Train model
-        model = LogisticRegression(**params, random_state=42)
-        model.fit(x_train, y_train)
+        # Create and train pipeline
+        pipe = Pipeline([
+            ('scaler', StandardScaler()),
+            ('model', LogisticRegression(**params, random_state=42))
+        ])
+        pipe.fit(x_train, y_train)
 
         # Get predictions and evaluate
-        y_pred = model.predict(x_test)
+        y_pred = pipe.predict(x_test)
         metrics = get_metrics(y_test, y_pred)
         for metric in metrics:
             print(f'{metric}: {metrics[metric]}')
@@ -89,15 +88,15 @@ def main():
         input_examples = x.iloc[:args.max_input_examples, :]
 
         # Log with MLflow
-        model_name = 'logistic_regression_model'
+        pipe_name = 'iris_classification_pipeline'
         mlflow.log_params(params)
         mlflow.log_metrics(metrics)
         mlflow.log_artifact(filepath)
-        mlflow.sklearn.log_model(model, model_name, signature=signature,
+        mlflow.sklearn.log_model(pipe, pipe_name, signature=signature,
                                  input_example=input_examples)
         if args.save_model:
-            model_dirpath = os.path.join(dirpath, 'mlmodels', model_name)
-            mlflow.sklearn.save_model(model, model_dirpath,
+            pipe_dirpath = os.path.join(dirpath, 'mlmodels', pipe_name)
+            mlflow.sklearn.save_model(pipe, pipe_dirpath,
                                       signature=signature,
                                       input_example=input_examples)
 
